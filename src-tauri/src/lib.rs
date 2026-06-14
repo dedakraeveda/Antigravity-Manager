@@ -488,6 +488,7 @@ pub fn run() {
             commands::save_text_file,
             commands::read_text_file,
             commands::clear_log_cache,
+            commands::get_native_antigravity_state,
             commands::clear_antigravity_cache,
             commands::get_antigravity_cache_paths,
             commands::open_data_folder,

@@ -686,6 +686,13 @@ pub async fn clear_log_cache() -> Result<(), String> {
     modules::logger::clear_logs()
 }
 
+/// 获取 Native Antigravity 2.x 状态路径（非 IDE：~/.gemini/antigravity + OS credential store）
+#[tauri::command]
+pub async fn get_native_antigravity_state(
+) -> Result<modules::native_antigravity::NativeAntigravityState, String> {
+    modules::native_antigravity::inspect_state()
+}
+
 /// 清理 Antigravity 应用缓存
 /// 用于解决登录失败、版本验证错误等问题
 #[tauri::command]
