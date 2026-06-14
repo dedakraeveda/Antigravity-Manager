@@ -76,6 +76,7 @@ If you like this project, you might also be interested in:
 *   **OAuth 2.0 Authorization (Auto/Manual)**: Pre-generates a copyable authorization URL so you can finish auth in any browser; after the callback, the app auto-completes and saves the account (use “I already authorized, continue” if needed).
 *   **Multi-dimensional Import**: Supports single token entry, JSON batch import, and automatic hot migration from V1 legacy databases.
 *   **Gateway-level Views**: Supports switching between "List" and "Grid" views. Provides 403 Forbidden detection, automatically marking and skipping accounts with permission anomalies.
+*   **Classic Antigravity 2.x Switching**: The Classic/native Antigravity app stores OAuth credentials in the OS credential store (`gemini:antigravity`) and keeps conversations/agent state under `~/.gemini/antigravity`. The switcher now verifies the credential-store write, records the native storage location, and leaves conversation/brain data untouched.
 
 ### 3.  Protocol Conversion & Relay (API Proxy)
 *   **Multi-Protocol Adaptation (Multi-Sink)**:
