@@ -78,8 +78,16 @@ impl SystemIntegration for DesktopIntegration {
             // ================== 最新版 Antigravity 原生应用逻辑 (>= 2.0.0) ==================
             // 2.1 写入系统 Keychain/Keyring
             write_to_system_keyring(account)?;
+            verify_system_keyring(account)?;
 
-            // 2.2 原生应用可能没有 storage.json，但如果有的话，我们也可以尝试安全地写入设备 Profile，以兼容指纹信息
+            // 2.2 Native Antigravity 2.x stores agent/session state under ~/.gemini/antigravity
+            // rather than VS Code-style User/globalStorage. Record and validate that native state
+            // location so classic/non-IDE switching is explicit instead of a silent keyring-only write.
+            if !is_ide {
+                crate::modules::native_antigravity::after_keyring_switch(account)?;
+            }
+
+            // 2.3 原生应用可能没有 storage.json，但如果有的话，我们也可以尝试安全地写入设备 Profile，以兼容指纹信息
             if let Ok(storage_path) = device::get_storage_path(target_ide) {
                 if let Some(ref profile) = account.device_profile {
                     let _ = device::write_profile(&storage_path, profile);
@@ -333,6 +341,90 @@ fn write_to_system_keyring(account: &crate::models::Account) -> Result<(), Strin
     crate::modules::logger::log_info(
         "[Desktop] Successfully wrote token to system credential store.",
     );
+    Ok(())
+}
+
+fn verify_system_keyring(account: &crate::models::Account) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use std::ptr;
+
+        #[repr(C)]
+        struct FILETIME {
+            dw_low_date_time: u32,
+            dw_high_date_time: u32,
+        }
+
+        #[repr(C)]
+        struct CREDENTIALW {
+            flags: u32,
+            cred_type: u32,
+            target_name: *const u16,
+            comment: *const u16,
+            last_written: FILETIME,
+            credential_blob_size: u32,
+            credential_blob: *const u8,
+            persist: u32,
+            attribute_count: u32,
+            attributes: *const std::ffi::c_void,
+            target_alias: *const u16,
+            user_name: *const u16,
+        }
+
+        #[link(name = "advapi32")]
+        extern "system" {
+            fn CredReadW(
+                target_name: *const u16,
+                type_: u32,
+                flags: u32,
+                credential: *mut *mut CREDENTIALW,
+            ) -> i32;
+            fn CredFree(buffer: *mut std::ffi::c_void);
+        }
+
+        let target = "gemini:antigravity";
+        let target_wide: Vec<u16> = std::ffi::OsStr::new(target)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        unsafe {
+            let mut cred_ptr: *mut CREDENTIALW = ptr::null_mut();
+            let res = CredReadW(target_wide.as_ptr(), 1, 0, &mut cred_ptr);
+            if res == 0 || cred_ptr.is_null() {
+                let err = std::io::Error::last_os_error();
+                return Err(format!("Windows CredReadW verification failed: {}", err));
+            }
+
+            let cred = &*cred_ptr;
+            let blob = std::slice::from_raw_parts(
+                cred.credential_blob,
+                cred.credential_blob_size as usize,
+            );
+            let value = String::from_utf8_lossy(blob);
+            let verified = value.contains(&account.token.refresh_token)
+                && (value.trim_start().starts_with('{') || value.starts_with("go-keyring-base64:"));
+            CredFree(cred_ptr as *mut std::ffi::c_void);
+
+            if !verified {
+                return Err(
+                    "Windows credential verification failed: stored gemini:antigravity payload does not match selected account"
+                        .to_string(),
+                );
+            }
+        }
+
+        crate::modules::logger::log_info(
+            "[Desktop] Verified Windows Credential Manager target gemini:antigravity.",
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = account;
+    }
+
     Ok(())
 }
 
